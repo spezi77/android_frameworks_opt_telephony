@@ -670,7 +670,6 @@ public final class DcTracker extends DcTrackerBase {
             }
             int radioTech = mPhone.getServiceState().getRilDataRadioTechnology();
             if (apnContext.getState() == DctConstants.State.IDLE) {
-
                 ArrayList<ApnSetting> waitingApns = buildWaitingApns(apnContext.getApnType(),
                         radioTech);
                 if (waitingApns.isEmpty()) {
