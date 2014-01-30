@@ -1526,13 +1526,14 @@ public final class DataConnection extends StateMachine {
                     mRilRat = drsRatPair.second;
                     if (SystemProperties.getInt("ro.telephony.toroRIL", 0) == 1) {
                         if (DBG) {
-                            log("DcDefaultState: Entering Inactive State - EVENT_DATA_CONNECTION_DRS_OR_RAT_CHANGED"
+                            log("DcActiveState: Forcing Inactive State - EVENT_DATA_CONNECTION_DRS_OR_RAT_CHANGED"
                                     + " drs=" + mDataRegState
                                     + " mRilRat=" + mRilRat);
                         }
                         mInactiveState.setEnterNotificationParams(DcFailCause.NONE);
                         transitionTo(mInactiveState);
                     }
+                    retVal = HANDLED;
                     break;
                 }
                 default:
