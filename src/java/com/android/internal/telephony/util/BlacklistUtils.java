@@ -45,6 +45,7 @@ public class BlacklistUtils {
     public final static int MATCH_UNKNOWN = 2;
     public final static int MATCH_LIST = 3;
     public final static int MATCH_REGEX = 4;
+    public final static int MATCH_ALL = 5;
 
     public final static int BLOCK_CALLS =
             Settings.System.BLACKLIST_BLOCK << Settings.System.BLACKLIST_PHONE_SHIFT;
@@ -92,6 +93,11 @@ public class BlacklistUtils {
         } else {
             Log.e(TAG, "Invalid mode " + mode);
             return MATCH_NONE;
+        }
+
+        if (isBlacklistAllNumberEnabled(context)) {
+            if (DEBUG) Log.d(TAG, "Blacklist matched due to all number");
+            return MATCH_ALL;
         }
 
         // Private and unknown number matching
@@ -174,6 +180,12 @@ public class BlacklistUtils {
         return (Settings.System.getIntForUser(context.getContentResolver(),
                 Settings.System.PHONE_BLACKLIST_UNKNOWN_NUMBER_MODE, 0,
                 UserHandle.USER_CURRENT_OR_SELF) & mode) != 0;
+    }
+
+    public static boolean isBlacklistAllNumberEnabled(Context context) {
+        return Settings.System.getIntForUser(context.getContentResolver(),
+                Settings.System.PHONE_BLACKLIST_ALL_NUMBER_MODE, 0,
+                UserHandle.USER_CURRENT_OR_SELF) != 0;
     }
 
     public static boolean isBlacklistRegexEnabled(Context context) {
