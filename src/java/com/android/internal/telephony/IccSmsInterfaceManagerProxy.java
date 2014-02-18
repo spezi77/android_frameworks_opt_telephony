@@ -210,6 +210,28 @@ public class IccSmsInterfaceManagerProxy extends ISms.Stub {
     }
 
     @Override
+    public void sendTextWithPriority(String callingPackage, String destAddr, String scAddr,
+            String text, PendingIntent sentIntent, PendingIntent deliveryIntent, int priority) {
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.SEND_SMS,
+                "Sending SMS message");
+        if (mIccSmsInterfaceManager.isShortSMSCode(destAddr)) {
+            mIccSmsInterfaceManager.sendTextWithPriority(callingPackage, destAddr, scAddr, text,
+                    sentIntent, deliveryIntent, priority);
+            return;
+        }
+        ArrayList<String> parts = new ArrayList<String>();
+        parts.add(text);
+        ArrayList<PendingIntent> sentIntents = new ArrayList<PendingIntent>();
+        sentIntents.add(sentIntent);
+        ArrayList<PendingIntent> deliveryIntents = new ArrayList<PendingIntent>();
+        deliveryIntents.add(deliveryIntent);
+        broadcastOutgoingSms(callingPackage, destAddr, scAddr, false, parts, sentIntents,
+                deliveryIntents, priority);
+    }
+
+
+    @Override
     public void sendMultipartText(String callingPackage, String destAddr, String scAddr,
             List<String> parts, List<PendingIntent> sentIntents,
             List<PendingIntent> deliveryIntents) {
