@@ -555,7 +555,7 @@ public abstract class SMSDispatcher extends Handler {
         if (mSmsPseudoMultipart) {
             // Send as individual messages as the combination of device and
             // carrier behavior may not process concatenated messages correctly.
-            sendPseudoMultipartText(destAddr, scAddr, parts, sentIntents, deliveryIntents);
+            sendPseudoMultipartText(destAddr, scAddr, parts, sentIntents, deliveryIntents, priority);
             return;
         }
 
@@ -642,7 +642,7 @@ public abstract class SMSDispatcher extends Handler {
      */
     private void sendPseudoMultipartText(String destAddr, String scAddr,
             ArrayList<String> parts, ArrayList<PendingIntent> sentIntents,
-            ArrayList<PendingIntent> deliveryIntents) {
+            ArrayList<PendingIntent> deliveryIntents, int priority) {
         int msgCount = parts.size();
 
         mRemainingMessages = msgCount;
@@ -658,7 +658,7 @@ public abstract class SMSDispatcher extends Handler {
                 deliveryIntent = deliveryIntents.get(i);
             }
 
-            sendText(destAddr, scAddr, parts.get(i), sentIntent, deliveryIntent);
+            sendText(destAddr, scAddr, parts.get(i), sentIntent, deliveryIntent, priority);
         }
     }
 
