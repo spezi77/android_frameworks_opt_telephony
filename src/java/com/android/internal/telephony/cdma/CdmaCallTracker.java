@@ -113,6 +113,7 @@ public final class CdmaCallTracker extends CallTracker {
             CdmaConnection c = (CdmaConnection) mForegroundCall.getLatestConnection();
             if (c.getDurationMillis() > 0 && !c.isConnectionTimerReset() && !c.isIncoming()) {
                 c.resetConnectionTimer();
+                mPhone.notifyPreciseCallStateChanged();
             }
         }
     }
