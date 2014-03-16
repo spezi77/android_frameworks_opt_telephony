@@ -3280,9 +3280,13 @@ public class RIL extends BaseCommands implements CommandsInterface {
         }
         cardStatus.mApplications = new IccCardApplicationStatus[numApplications];
 
+	oldRil = needsOldRilFeature("apptypesim");
+
         for (int i = 0 ; i < numApplications ; i++) {
             appStatus = new IccCardApplicationStatus();
             appStatus.app_type       = appStatus.AppTypeFromRILInt(p.readInt());
+	    // Seems the simplest way so we dont mess up the parcel
+            if (oldRil) appStatus.app_type = appStatus.AppTypeFromRILInt(1);
             appStatus.app_state      = appStatus.AppStateFromRILInt(p.readInt());
             appStatus.perso_substate = appStatus.PersoSubstateFromRILInt(p.readInt());
             appStatus.aid            = p.readString();
@@ -3503,7 +3507,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
         if (strings.length % mQANElements != 0) {
             throw new RuntimeException(
                 "RIL_REQUEST_QUERY_AVAILABLE_NETWORKS: invalid response. Got "
-                + strings.length + " strings, expected multible of " + mQANElements);
+                + strings.length + " strings, expected multiple of " + mQANElements);
         }
 
         ret = new ArrayList<OperatorInfo>(strings.length / mQANElements);
@@ -3637,9 +3641,16 @@ public class RIL extends BaseCommands implements CommandsInterface {
 
     protected Object
     responseSignalStrength(Parcel p) {
-        // Assume this is gsm, but doesn't matter as ServiceStateTracker
-        // sets the proper value.
-        SignalStrength signalStrength = SignalStrength.makeSignalStrengthFromRilParcel(p);
+	SignalStrength signalStrength;
+	if (needsOldRilFeature("signalstrengthgsm")) {
+		int gsmSignal = p.readInt();  
+		int gsmErrRate = p.readInt();
+		signalStrength = new SignalStrength(gsmSignal, gsmErrRate, -1, -1, -1, -1, -1, true);
+	} else {
+		// Assume this is gsm, but doesn't matter as ServiceStateTracker
+		// sets the proper value.
+		signalStrength = SignalStrength.makeSignalStrengthFromRilParcel(p);
+	}
         return signalStrength;
     }
 
@@ -3935,7 +3946,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
             case RIL_UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED:
                 return "UNSOL_RESPONSE_IMS_NETWORK_STATE_CHANGED";
             case RIL_UNSOL_STK_SEND_SMS_RESULT: return "RIL_UNSOL_STK_SEND_SMS_RESULT";
-            default: return "<unknown reponse>";
+            default: return "<unknown response>";
         }
     }
 
