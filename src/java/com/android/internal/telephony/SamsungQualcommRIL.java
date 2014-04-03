@@ -70,10 +70,12 @@ public class SamsungQualcommRIL extends RIL implements CommandsInterface {
     private boolean driverCall = needsOldRilFeature("newDriverCall");
     private boolean driverCallU = needsOldRilFeature("newDriverCallU");
     private boolean dialCode = needsOldRilFeature("newDialCode");
+    private boolean samsungEmergency = needsOldRilFeature("samsungEMSReq");
     public SamsungQualcommRIL(Context context, int networkMode,
             int cdmaSubscription) {
         super(context, networkMode, cdmaSubscription);
         mAudioManager = (AudioManager)mContext.getSystemService(Context.AUDIO_SERVICE);
+        mQANElements = SystemProperties.getInt("ro.ril.telephony.mqanelements", 4);
     }
 
     @Override
@@ -730,6 +732,10 @@ public class SamsungQualcommRIL extends RIL implements CommandsInterface {
     @Override
     public void
     dial(String address, int clirMode, UUSInfo uusInfo, Message result) {
+        if (samsungEmergency && PhoneNumberUtils.isEmergencyNumber(address)) {
+            dialEmergencyCall(address, clirMode, result);
+            return;
+        }
         if(!dialCode){
             super.dial(address, clirMode, uusInfo, result);
             return;
@@ -800,5 +806,21 @@ public class SamsungQualcommRIL extends RIL implements CommandsInterface {
                 result.sendToTarget();
             }
         }
+    }
+
+    static final int RIL_REQUEST_DIAL_EMERGENCY = 10016;
+    public void
+    dialEmergencyCall(String address, int clirMode, Message result) {
+        RILRequest rr;
+        Rlog.v(RILJ_LOG_TAG, "Emergency dial: " + address);
+
+        rr = RILRequest.obtain(RIL_REQUEST_DIAL_EMERGENCY, result);
+        rr.mParcel.writeString(address + "/");
+        rr.mParcel.writeInt(clirMode);
+        rr.mParcel.writeInt(0);  // UUS information is absent
+
+        if (RILJ_LOGD) riljLog(rr.serialString() + "> " + requestToString(rr.mRequest));
+
+        send(rr);
     }
 }
