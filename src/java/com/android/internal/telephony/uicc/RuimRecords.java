@@ -19,7 +19,7 @@ package com.android.internal.telephony.uicc;
 
 import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OPERATOR_ISO_COUNTRY;
 import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC;
-
+import static com.android.internal.telephony.TelephonyProperties.PROPERTY_APN_SIM_OPERATOR_NUMERIC;
 import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OPERATOR_ALPHA;
 import static com.android.internal.telephony.TelephonyProperties.PROPERTY_TEST_CSIM;
 
@@ -141,6 +141,8 @@ public final class RuimRecords extends IccRecords {
         mIccId = null;
 
         mAdnCache.reset();
+
+        setSystemProperty(PROPERTY_APN_SIM_OPERATOR_NUMERIC, null);
 
         // Don't clean up PROPERTY_ICC_OPERATOR_ISO_COUNTRY and
         // PROPERTY_ICC_OPERATOR_NUMERIC here. Since not all CDMA
@@ -682,6 +684,15 @@ public final class RuimRecords extends IccRecords {
     @Override
     protected void onAllRecordsLoaded() {
         if (DBG) log("record load complete");
+
+        String operator = getOperatorNumeric();
+        if (!TextUtils.isEmpty(operator)) {
+            log("onAllRecordsLoaded set 'gsm.apn.sim.operator.numeric' to operator='" +
+                    operator + "'");
+            setSystemProperty(PROPERTY_APN_SIM_OPERATOR_NUMERIC, operator);
+        } else {
+            log("onAllRecordsLoaded empty 'gsm.apn.sim.operator.numeric' skipping");
+        }
 
         setLocaleFromCsim();
         mRecordsLoadedRegistrants.notifyRegistrants(
