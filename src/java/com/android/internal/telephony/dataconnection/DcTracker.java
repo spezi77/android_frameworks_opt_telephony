@@ -95,7 +95,7 @@ public final class DcTracker extends DcTrackerBase {
     //***** Instance Variables
 
     private boolean mReregisterOnReconnectFailure = false;
-
+	public boolean runOnce = false;
 
     //***** Constants
 
@@ -152,7 +152,65 @@ public final class DcTracker extends DcTrackerBase {
         }
 
         mDataConnectionTracker = this;
+ if (!runOnce) {
+ if (DBG) log("Initial prod at APN to set without user intervention beginning.");
+ /*kanged from onApnChanged*/
+ DctConstants.State overallState = getOverallState();
+ boolean isDisconnected = (overallState == DctConstants.State.IDLE ||
+ overallState == DctConstants.State.FAILED);
 
+ if (mPhone instanceof GSMPhone) {
+ // The "current" may no longer be valid. MMS depends on this to send properly. TBD
+ ((GSMPhone)mPhone).updateCurrentCarrierInProvider();
+ }
+ // TODO: It'd be nice to only do this if the changed entrie(s)
+ // match the current operator.
+ if (DBG) log("onRunOnce: createAllApnList and cleanUpAllConnections");
+/**/
+ mAllApnSettings = new ArrayList<ApnSetting>();
+ String operator = SystemProperties.get("ro.cdma.home.operator.numeric");
+ if (operator != null) {
+ String selection = "numeric = '" + operator + "'";
+ // query only enabled apn.
+ // carrier_enabled : 1 means enabled apn, 0 disabled apn.
+ selection += " and carrier_enabled = 1";
+ if (DBG) log("createAllApnList: selection=" + selection);
+
+ Cursor cursor = mPhone.getContext().getContentResolver().query(
+ Telephony.Carriers.CONTENT_URI, null, selection, null, null);
+
+ if (cursor != null) {
+ if (cursor.getCount() > 0) {
+ mAllApnSettings = createApnList(cursor);
+ }
+ cursor.close();
+ }
+ }
+
+ if (mAllApnSettings.isEmpty()) {
+ if (DBG) log("createAllApnList: No APN found for carrier: " + operator);
+ mPreferredApn = null;
+ // TODO: What is the right behavior?
+ //notifyNoData(DataConnection.FailCause.MISSING_UNKNOWN_APN);
+ } else {
+ mPreferredApn = getPreferredApn();
+ if (mPreferredApn != null && !mPreferredApn.numeric.equals(operator)) {
+ mPreferredApn = null;
+ setPreferredApn(-1);
+ }
+ if (DBG) log("createAllApnList: mPreferredApn=" + mPreferredApn);
+ }
+ if (DBG) log("createAllApnList: X mAllApnSettings=" + mAllApnSettings);
+/**/
+ setInitialAttachApn();
+ cleanUpAllConnections(!isDisconnected, Phone.REASON_APN_CHANGED);
+ if (isDisconnected) {
+ setupDataOnConnectableApns(Phone.REASON_APN_CHANGED);
+ }
+/*end kang*/
+ runOnce = true;
+ if (DBG) log("Initial prod at APN to set without user intervention complete.");
+ }
         mApnObserver = new ApnChangeObserver();
         p.getContext().getContentResolver().registerContentObserver(
                 Telephony.Carriers.CONTENT_URI, true, mApnObserver);
