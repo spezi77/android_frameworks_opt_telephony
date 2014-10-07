@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2006 The Android Open Source Project
- * Copyright (C) 2014 The MoKee OpenSource Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +24,6 @@ import android.os.RegistrantList;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.ServiceState;
 import android.telephony.Rlog;
-import android.text.TextUtils;
 import android.os.SystemProperties;
 
 import com.android.internal.telephony.CallStateException;
@@ -57,12 +55,6 @@ public final class CdmaCallTracker extends CallTracker {
 
     static final int MAX_CONNECTIONS = 8;
     static final int MAX_CONNECTIONS_PER_CALL = 1; // only 1 connection allowed per call
-
-    //***** CDMA number fix
-    private static final int EVENT_LINE_CONTROL_INFO               = 101;
-    private static final int EVENT_PHONE_NUMBER_WAITING_TIMED_OUT  = 102;
-    private static final int PHONE_NUMBER_WAITER_TIMER             = 200;
-    private PhoneNumberWaiterState mPhoneNumberWaiterState = PhoneNumberWaiterState.IDLE;
 
     //***** Instance Variables
 
@@ -112,7 +104,6 @@ public final class CdmaCallTracker extends CallTracker {
         mCi.registerForNotAvailable(this, EVENT_RADIO_NOT_AVAILABLE, null);
         mCi.registerForCallWaitingInfo(this, EVENT_CALL_WAITING_INFO_CDMA, null);
         mCi.registerForLineControlInfo(this, EVENT_CDMA_INFO_REC, null);
-        mCi.registerForLineControlInfo(this, EVENT_LINE_CONTROL_INFO, null);
         mForegroundCall.setGeneric(false);
     }
 
@@ -122,7 +113,6 @@ public final class CdmaCallTracker extends CallTracker {
             CdmaConnection c = (CdmaConnection) mForegroundCall.getLatestConnection();
             if (c.getDurationMillis() > 0 && !c.isConnectionTimerReset() && !c.isIncoming()) {
                 c.resetConnectionTimer();
-                mPhone.notifyPreciseCallStateChanged();
             }
         }
     }
@@ -133,7 +123,6 @@ public final class CdmaCallTracker extends CallTracker {
         mCi.unregisterForOn(this);
         mCi.unregisterForNotAvailable(this);
         mCi.unregisterForCallWaitingInfo(this);
-        mCi.unregisterForLineControlInfo(this);
         for(CdmaConnection c : mConnections) {
             try {
                 if(c != null) {
@@ -466,6 +455,8 @@ public final class CdmaCallTracker extends CallTracker {
         }
     }
 
+
+
     private void
     updatePhoneState() {
         PhoneConstants.State oldState = mState;
@@ -512,10 +503,6 @@ public final class CdmaCallTracker extends CallTracker {
             // But don't keep polling if the channel is closed
             pollCallsAfterDelay();
             return;
-        }
-
-        if (polledCalls.size() == 0) {
-            setPhoneNumberWaiterState(PhoneNumberWaiterState.IDLE);
         }
 
         Connection newRinging = null; //or waiting
@@ -587,12 +574,10 @@ public final class CdmaCallTracker extends CallTracker {
                     if (Phone.DEBUG_PHONE) {
                         log("pendingMo=" + mPendingMO + ", dc=" + dc);
                     }
-                    if (waitForPhoneNumber(dc)) {
-                        // find if the MT call is a new ring or unknown connection
-                        newRinging = checkMtFindNewRinging(dc,i);
-                        if (newRinging == null) {
-                            unknownConnectionAppeared = true;
-                        }
+                    // find if the MT call is a new ring or unknown connection
+                    newRinging = checkMtFindNewRinging(dc,i);
+                    if (newRinging == null) {
+                        unknownConnectionAppeared = true;
                     }
                     checkAndEnableDataCallAfterEmergencyCallDropped();
                 }
@@ -635,12 +620,10 @@ public final class CdmaCallTracker extends CallTracker {
                     if (dc.isMT == true){
                         // Mt call takes precedence than Mo,drops Mo
                         mDroppedDuringPoll.add(conn);
-                        if (waitForPhoneNumber(dc)) {
-                            // find if the MT call is a new ring or unknown connection
-                            newRinging = checkMtFindNewRinging(dc,i);
-                            if (newRinging == null) {
-                                unknownConnectionAppeared = true;
-                            }
+                        // find if the MT call is a new ring or unknown connection
+                        newRinging = checkMtFindNewRinging(dc,i);
+                        if (newRinging == null) {
+                            unknownConnectionAppeared = true;
                         }
                         checkAndEnableDataCallAfterEmergencyCallDropped();
                     } else {
@@ -1077,43 +1060,10 @@ public final class CdmaCallTracker extends CallTracker {
                 onControlInfoRec();
             break;
 
-            case EVENT_LINE_CONTROL_INFO:
-                ar = (AsyncResult)msg.obj;
-                if (ar.exception == null && ((CdmaInformationRecords.CdmaLineControlInfoRec)ar.result).lineCtrlPolarityIncluded == 1) {
-                    CdmaConnection cdcon = null;
-                    if (mPendingMO != null) {
-                        cdcon = mPendingMO;
-                        if (cdcon != null) {
-                            cdcon.onConnectedInOrOut();
-                        }
-                    } else {
-                        long l = 9223372036854775807L;
-                        for (int i = 0; i < mConnections.length; i++) {
-                            if (mConnections[i] != null && mConnections[i].getState() == CdmaCall.State.ACTIVE && mConnections[i].getDurationMillis() < l) {
-                                l = mConnections[i].getDurationMillis();
-                                cdcon = mConnections[i];
-                            }
-                        }
-                    }
-                }
-            break;
-
-            case PHONE_NUMBER_WAITER_TIMER:
-                Rlog.d("CdmaCallTracker", "timed out to wait phone number");
-                setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITED);
-                pollCallsWhenSafe();
-            break;
-
             default:{
                throw new RuntimeException("unexpected event not handled");
             }
         }
-    }
-
-    private static enum PhoneNumberWaiterState {
-        IDLE,
-        WAITING,
-        WAITED;
     }
 
     /**
@@ -1199,34 +1149,6 @@ public final class CdmaCallTracker extends CallTracker {
      */
     boolean isInEmergencyCall() {
         return mIsInEmergencyCall;
-    }
-
-    private void setPhoneNumberWaiterState(PhoneNumberWaiterState state) {
-        Rlog.d("CdmaCallTracker", "set phone number waiter state to " + state + ", old state is "
-                + mPhoneNumberWaiterState);
-        mPhoneNumberWaiterState = state;
-    }
-
-    private boolean waitForPhoneNumber(DriverCall dc) {
-        if (dc != null) {
-            switch (mPhoneNumberWaiterState.ordinal()) {
-                case 0:
-                    if (TextUtils.isEmpty(dc.number)) {
-                        setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITING);
-                        sendEmptyMessageDelayed(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT, PHONE_NUMBER_WAITER_TIMER);
-                        return false;
-                    }
-                return true;
-                case 1:
-                    if (!TextUtils.isEmpty(dc.number)) {
-                        removeMessages(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT);
-                        setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITED);
-                        return true;
-                    }
-                break;
-            }
-        }
-        return !dc.isMT;
     }
 
     @Override
