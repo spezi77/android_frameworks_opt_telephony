@@ -43,6 +43,7 @@ import com.android.internal.telephony.MccTable;
 import com.android.internal.telephony.cdma.sms.UserData;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppState;
+import com.android.internal.telephony.uicc.UICCConfig;
 
 
 /**
@@ -85,6 +86,10 @@ public final class RuimRecords extends IccRecords {
                 + " mHomeSystemId=" + mHomeSystemId
                 + " mHomeNetworkId=" + mHomeNetworkId;
     }
+
+    //Constants
+    //MNC length in case of CSIM/RUIM IMSI is 2 as per spec C.S0065 section 5.2.2
+    private static final int CSIM_IMSI_MNC_LENGTH = 2;
 
     // ***** Event Constants
     private static final int EVENT_GET_IMSI_DONE = 3;
@@ -249,6 +254,18 @@ public final class RuimRecords extends IccRecords {
             return null;
         }
 
+        if (SystemProperties.getBoolean("ro.telephony.get_imsi_from_sim", false)) {
+            String imsi = mParentApp.getUICCConfig().getImsi();
+            int mnclength = mParentApp.getUICCConfig().getMncLength();
+
+            // If we are LTE over CDMA (Verizon), then pull the correct info from SIMRecords
+            if (imsi != null) {
+                log("Overriding with Operator Numeric: " + imsi.substring(0, 3 + mnclength));
+                return imsi.substring(0, 3 + mnclength);
+            }
+        }
+
+
         if (mMncLength != UNINITIALIZED && mMncLength != UNKNOWN) {
             // Length = length of MCC + length of MNC
             // length of mcc = 3 (3GPP2 C.S0005 - Section 2.3)
@@ -259,7 +276,7 @@ public final class RuimRecords extends IccRecords {
         // have a valid value in ef[ad]
 
         int mcc = Integer.parseInt(mImsi.substring(0,3));
-        return mImsi.substring(0, 3 + MccTable.smallestDigitsMccForMnc(mcc));
+        return mImsi.substring(0, 3 + CSIM_IMSI_MNC_LENGTH);
     }
 
     // Refer to ETSI TS 102.221
@@ -760,6 +777,8 @@ public final class RuimRecords extends IccRecords {
         mFh.loadEFTransparent(EF_CSIM_EPRL, 4,
                 obtainMessage(EVENT_GET_ICC_RECORD_DONE, new EfCsimEprlLoaded()));
         mRecordsToLoad++;
+
+        mFh.getEFLinearRecordSize(EF_SMS, obtainMessage(EVENT_GET_SMS_RECORD_SIZE_DONE));
 
         if (DBG) log("fetchRuimRecords " + mRecordsToLoad + " requested: " + mRecordsRequested);
         // Further records that can be inserted are Operator/OEM dependent

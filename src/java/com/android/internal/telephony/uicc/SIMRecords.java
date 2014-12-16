@@ -37,6 +37,7 @@ import com.android.internal.telephony.MccTable;
 import com.android.internal.telephony.SmsConstants;
 import com.android.internal.telephony.gsm.SimTlv;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
+import com.android.internal.telephony.uicc.UICCConfig;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -240,6 +241,8 @@ public class SIMRecords extends IccRecords {
         setSystemProperty(PROPERTY_APN_SIM_OPERATOR_NUMERIC, null);
         setSystemProperty(PROPERTY_ICC_OPERATOR_ALPHA, null);
         setSystemProperty(PROPERTY_ICC_OPERATOR_ISO_COUNTRY, null);
+        mParentApp.getUICCConfig().setImsi(mImsi);
+        mParentApp.getUICCConfig().setMncLength(mMncLength);
 
         // recordsRequested is set to false indicating that the SIM
         // read requests made so far are not valid. This is set to
@@ -450,7 +453,7 @@ public class SIMRecords extends IccRecords {
 
     public int getVoiceMessageCount() {
         boolean voiceMailWaiting = false;
-        int countVoiceMessages = 0;
+        int countVoiceMessages = -1;
         if (mEfMWIS != null) {
             // Use this data if the EF[MWIS] exists and
             // has been loaded
@@ -658,6 +661,14 @@ public class SIMRecords extends IccRecords {
                         mMncLength = UNKNOWN;
                         loge("Corrupt IMSI!");
                     }
+                }
+
+                mParentApp.getUICCConfig().setImsi(mImsi);
+                if (mMncLength == UNKNOWN || mMncLength == UNINITIALIZED) {
+                    // We need to default to something that seems common
+                    mParentApp.getUICCConfig().setMncLength(3);
+                } else {
+                    mParentApp.getUICCConfig().setMncLength(mMncLength);
                 }
 
                 if (mMncLength != UNKNOWN && mMncLength != UNINITIALIZED) {
@@ -872,7 +883,10 @@ public class SIMRecords extends IccRecords {
 
                     if (mMncLength == 0xf) {
                         mMncLength = UNKNOWN;
+                    } else {
+                        mParentApp.getUICCConfig().setMncLength(mMncLength);
                     }
+
                 } finally {
                     if (((mMncLength == UNINITIALIZED) || (mMncLength == UNKNOWN) ||
                             (mMncLength == 2)) && ((mImsi != null) && (mImsi.length() >= 6))) {
@@ -1462,6 +1476,8 @@ public class SIMRecords extends IccRecords {
         mFh.loadEFTransparent(EF_GID1, obtainMessage(EVENT_GET_GID1_DONE));
         mRecordsToLoad++;
 
+        mFh.getEFLinearRecordSize(EF_SMS, obtainMessage(EVENT_GET_SMS_RECORD_SIZE_DONE));
+
         // XXX should seek instead of examining them all
         if (false) { // XXX
             mFh.loadEFLinearFixedAll(EF_SMS, obtainMessage(EVENT_GET_ALL_SMS_DONE));
@@ -1641,6 +1657,12 @@ public class SIMRecords extends IccRecords {
                     mRecordsEventsRegistrants.notifyResult(EVENT_SPN);
                 }else {
                     if (DBG) log("No SPN loaded in either CHPS or 3GPP");
+                    if (mPnnHomeName != null && mSpn == null) {
+                        if (DBG) log("Falling back to home network name for SPN");
+                        mSpn = mPnnHomeName;
+                        setSystemProperty(PROPERTY_ICC_OPERATOR_ALPHA, mSpn);
+                        mRecordsEventsRegistrants.notifyResult(EVENT_SPN);
+                    }
                 }
 
                 mSpnState = GetSpnFsmState.IDLE;

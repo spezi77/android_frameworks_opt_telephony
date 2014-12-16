@@ -63,6 +63,9 @@ public final class CdmaCallTracker extends CallTracker {
     private static final int EVENT_PHONE_NUMBER_WAITING_TIMED_OUT  = 102;
     private static final int PHONE_NUMBER_WAITER_TIMER             = 200;
     private PhoneNumberWaiterState mPhoneNumberWaiterState = PhoneNumberWaiterState.IDLE;
+    private String[] CMDAFixWhiteList = {"aries"};
+    private String currentDevice = SystemProperties.get("ro.mk.device");
+    private boolean inWhiteList = false;
 
     //***** Instance Variables
 
@@ -112,7 +115,13 @@ public final class CdmaCallTracker extends CallTracker {
         mCi.registerForNotAvailable(this, EVENT_RADIO_NOT_AVAILABLE, null);
         mCi.registerForCallWaitingInfo(this, EVENT_CALL_WAITING_INFO_CDMA, null);
         mCi.registerForLineControlInfo(this, EVENT_CDMA_INFO_REC, null);
-        mCi.registerForLineControlInfo(this, EVENT_LINE_CONTROL_INFO, null);
+        for (String device : CMDAFixWhiteList) {
+            if (device.equals(currentDevice)) {
+                inWhiteList = true;
+                mCi.registerForLineControlInfo(this, EVENT_LINE_CONTROL_INFO, null);
+                break;
+            }
+        }
         mForegroundCall.setGeneric(false);
     }
 
@@ -122,7 +131,7 @@ public final class CdmaCallTracker extends CallTracker {
             CdmaConnection c = (CdmaConnection) mForegroundCall.getLatestConnection();
             if (c.getDurationMillis() > 0 && !c.isConnectionTimerReset() && !c.isIncoming()) {
                 c.resetConnectionTimer();
-                mPhone.notifyPreciseCallStateChanged();
+                if (inWhiteList) mPhone.notifyPreciseCallStateChanged();
             }
         }
     }
@@ -133,7 +142,6 @@ public final class CdmaCallTracker extends CallTracker {
         mCi.unregisterForOn(this);
         mCi.unregisterForNotAvailable(this);
         mCi.unregisterForCallWaitingInfo(this);
-        mCi.unregisterForLineControlInfo(this);
         for(CdmaConnection c : mConnections) {
             try {
                 if(c != null) {
@@ -514,7 +522,7 @@ public final class CdmaCallTracker extends CallTracker {
             return;
         }
 
-        if (polledCalls.size() == 0) {
+        if (polledCalls.size() == 0 && inWhiteList) {
             setPhoneNumberWaiterState(PhoneNumberWaiterState.IDLE);
         }
 
@@ -587,7 +595,15 @@ public final class CdmaCallTracker extends CallTracker {
                     if (Phone.DEBUG_PHONE) {
                         log("pendingMo=" + mPendingMO + ", dc=" + dc);
                     }
-                    if (waitForPhoneNumber(dc)) {
+                    if (inWhiteList) {
+                        if (waitForPhoneNumber(dc)) {
+                            // find if the MT call is a new ring or unknown connection
+                            newRinging = checkMtFindNewRinging(dc,i);
+                            if (newRinging == null) {
+                                unknownConnectionAppeared = true;
+                            }
+                        }
+                    } else {
                         // find if the MT call is a new ring or unknown connection
                         newRinging = checkMtFindNewRinging(dc,i);
                         if (newRinging == null) {
@@ -635,7 +651,15 @@ public final class CdmaCallTracker extends CallTracker {
                     if (dc.isMT == true){
                         // Mt call takes precedence than Mo,drops Mo
                         mDroppedDuringPoll.add(conn);
-                        if (waitForPhoneNumber(dc)) {
+                        if (inWhiteList) {
+                            if (waitForPhoneNumber(dc)) {
+                                // find if the MT call is a new ring or unknown connection
+                                newRinging = checkMtFindNewRinging(dc,i);
+                                if (newRinging == null) {
+                                    unknownConnectionAppeared = true;
+                                }
+                            }
+                        } else {
                             // find if the MT call is a new ring or unknown connection
                             newRinging = checkMtFindNewRinging(dc,i);
                             if (newRinging == null) {
@@ -1087,7 +1111,7 @@ public final class CdmaCallTracker extends CallTracker {
                             cdcon.onConnectedInOrOut();
                         }
                     } else {
-                        long l = 9223372036854775807L;
+                        long l = Long.MAX_VALUE;
                         for (int i = 0; i < mConnections.length; i++) {
                             if (mConnections[i] != null && mConnections[i].getState() == CdmaCall.State.ACTIVE && mConnections[i].getDurationMillis() < l) {
                                 l = mConnections[i].getDurationMillis();
@@ -1208,23 +1232,22 @@ public final class CdmaCallTracker extends CallTracker {
     }
 
     private boolean waitForPhoneNumber(DriverCall dc) {
-        if (dc != null) {
-            switch (mPhoneNumberWaiterState.ordinal()) {
-                case 0:
-                    if (TextUtils.isEmpty(dc.number)) {
-                        setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITING);
-                        sendEmptyMessageDelayed(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT, PHONE_NUMBER_WAITER_TIMER);
-                        return false;
-                    }
+        if (dc == null) return false;
+        switch (mPhoneNumberWaiterState.ordinal()) {
+            case 0:
+                if (TextUtils.isEmpty(dc.number)) {
+                    setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITING);
+                    sendEmptyMessageDelayed(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT, PHONE_NUMBER_WAITER_TIMER);
+                    return false;
+                }
                 return true;
-                case 1:
-                    if (!TextUtils.isEmpty(dc.number)) {
-                        removeMessages(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT);
-                        setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITED);
-                        return true;
-                    }
-                break;
-            }
+            case 1:
+                if (!TextUtils.isEmpty(dc.number)) {
+                    removeMessages(EVENT_PHONE_NUMBER_WAITING_TIMED_OUT);
+                    setPhoneNumberWaiterState(PhoneNumberWaiterState.WAITED);
+                    return true;
+                }
+            break;
         }
         return !dc.isMT;
     }

@@ -85,6 +85,7 @@ public class CallManager {
     private static final int EVENT_POST_DIAL_CHARACTER = 119;
     private static final int EVENT_SUPP_SERVICE_NOTIFY = 120;
     private static final int EVENT_CALL_MODIFY = 121;
+    private static final int EVENT_CALL_MODIFY_RESPONSE = 122;
 
     private static final String PROPERTY_QCHAT_ENABLED = "persist.atel.qchat_enabled";
 
@@ -115,6 +116,8 @@ public class CallManager {
     protected String mDialString;
 
     protected boolean mSpeedUpAudioForMtCall = false;
+
+    protected Boolean mAlwaysRequestVolumeFocus;
 
     protected CmHandler mHandler;
 
@@ -186,6 +189,9 @@ public class CallManager {
     = new RegistrantList();
 
     protected final RegistrantList mCallModifyRegistrants
+    = new RegistrantList();
+
+    protected final RegistrantList mModifyCallResponseRegistrants
     = new RegistrantList();
 
     protected CallManager() {
@@ -470,7 +476,8 @@ public class CallManager {
                 int curAudioMode = audioManager.getMode();
                 if (curAudioMode != AudioManager.MODE_RINGTONE) {
                     // only request audio focus if the ringtone is going to be heard
-                    if (audioManager.getStreamVolume(AudioManager.STREAM_RING) > 0) {
+                    if (audioManager.getStreamVolume(AudioManager.STREAM_RING) > 0
+                            || shouldAlwaysRequestAudioFocusForCall()) {
                         if (VDBG) Rlog.d(LOG_TAG, "requestAudioFocus on STREAM_RING");
                         audioManager.requestAudioFocusForCall(AudioManager.STREAM_RING,
                                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
@@ -523,6 +530,16 @@ public class CallManager {
         Rlog.d(LOG_TAG, "setAudioMode state = " + getState());
     }
 
+    protected boolean shouldAlwaysRequestAudioFocusForCall() {
+        if (mAlwaysRequestVolumeFocus == null) {
+            Context context = getContext();
+            if (context == null) return false;
+            mAlwaysRequestVolumeFocus = context.getResources().getBoolean(
+                    com.android.internal.R.bool.config_alwaysRequestAudioFocusForCalls);
+        }
+        return mAlwaysRequestVolumeFocus;
+    }
+
     protected Context getContext() {
         Phone defaultPhone = getDefaultPhone();
         return ((defaultPhone == null) ? null : defaultPhone.getContext());
@@ -573,6 +590,8 @@ public class CallManager {
             phone.registerForEcmTimerReset(mHandler, EVENT_ECM_TIMER_RESET, null);
             try {
                 phone.registerForModifyCallRequest(mHandler, EVENT_CALL_MODIFY, null);
+                phone.registerForModifyCallResponse(
+                      mHandler, EVENT_CALL_MODIFY_RESPONSE, null);
             } catch (CallStateException e) {
                 Rlog.e(LOG_TAG, "registerForModifyCallRequest: CallStateException:" + e);
             }
@@ -624,6 +643,7 @@ public class CallManager {
             phone.unregisterForEcmTimerReset(mHandler);
             try {
                 phone.unregisterForModifyCallRequest(mHandler);
+                phone.unregisterForModifyCallResponse(mHandler);
             } catch (CallStateException e) {
                 Rlog.e(LOG_TAG, "unregisterForModifyCallRequest ", e);
             }
@@ -696,10 +716,12 @@ public class CallManager {
             AudioManager audioManager = (AudioManager)
                     context.getSystemService(Context.AUDIO_SERVICE);
             int currMode = audioManager.getMode();
-            if ((currMode != AudioManager.MODE_IN_CALL) && !(ringingPhone instanceof SipPhone)) {
-                Rlog.d(LOG_TAG, "setAudioMode Setting audio mode from " +
-                                currMode + " to " + AudioManager.MODE_IN_CALL);
-                audioManager.setMode(AudioManager.MODE_IN_CALL);
+            if (!(ringingPhone instanceof SipPhone)) {
+                if (currMode != AudioManager.MODE_IN_CALL) {
+                    Rlog.d(LOG_TAG, "setAudioMode Setting audio mode from " +
+                            currMode + " to " + AudioManager.MODE_IN_CALL);
+                    audioManager.setMode(AudioManager.MODE_IN_CALL);
+                }
                 mSpeedUpAudioForMtCall = true;
             }
         }
@@ -1718,6 +1740,17 @@ public class CallManager {
         mCallModifyRegistrants.remove(h);
     }
 
+    /*
+     * Registrants for CallModify Failed or Succeed
+     */
+    public void registerForCallModifyResponse(Handler h, int what, Object obj) {
+        mModifyCallResponseRegistrants.addUnique(h, what, obj);
+    }
+
+    public void unregisterForCallModifyResponse(Handler h) {
+        mModifyCallResponseRegistrants.remove(h);
+    }
+
     /* APIs to access foregroudCalls, backgroudCalls, and ringingCalls
      * 1. APIs to access list of calls
      * 2. APIs to check if any active call, which has connection other than
@@ -2093,6 +2126,16 @@ public class CallManager {
                         notifyMsg.sendToTarget();
                     }
                     break;
+                 case EVENT_CALL_MODIFY_RESPONSE:
+                    if (VDBG) Rlog.d(LOG_TAG, " handleMessage (EVENT_CALL_MODIFY_RESPONSE)");
+                    AsyncResult res = (AsyncResult) msg.obj;
+                    if (res != null && res.result != null && res.exception == null) {
+                        mModifyCallResponseRegistrants.notifyRegistrants(new AsyncResult(null,
+                                res.result, null));
+                    } else {
+                        Rlog.e(LOG_TAG, "EVENT_MODIFY_CALL_RESPONSE AsyncResult res= " + res);
+                    }
+                    break;
             }
         }
     }
@@ -2254,7 +2297,20 @@ public class CallManager {
         return false;
     }
 
-    public void deactivateLchState(int sub) {
-        Rlog.e(LOG_TAG, " deactivateLchState not supported");
+    public void startDtmf(char c, int subscription) {
+        Rlog.e(LOG_TAG, " startDtmf not supported for subscription");
+    }
+
+    public void stopDtmf(int subscription) {
+        Rlog.e(LOG_TAG, " stopDtmf not supported for subscription");
+    }
+
+    public void setSubInConversation(int subscription) {
+        Rlog.e(LOG_TAG, " setSubInConversation not supported");
+    }
+
+    public int getSubInConversation() {
+        Rlog.e(LOG_TAG, " getSubInConversation not supported");
+        return 0;
     }
 }

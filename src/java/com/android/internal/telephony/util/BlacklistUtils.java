@@ -79,7 +79,7 @@ public class BlacklistUtils {
         }
 
         if (DEBUG) {
-            Log.d(TAG, "Checking number " + number + " against the Blacklist for mode " + mode);
+            Log.d(TAG, "Checking number against the Blacklist for mode " + mode);
         }
 
         final String type;
@@ -154,7 +154,7 @@ public class BlacklistUtils {
             c.close();
         }
 
-        if (DEBUG) Log.d(TAG, "Blacklist check result for number " + number + " is " + result);
+        if (DEBUG) Log.d(TAG, "Blacklist check result for number is " + result);
         return result;
     }
 
