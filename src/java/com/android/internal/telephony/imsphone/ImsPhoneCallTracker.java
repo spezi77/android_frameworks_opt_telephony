@@ -66,6 +66,7 @@ import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneBase;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyProperties;
+import com.android.internal.telephony.gsm.SuppServiceNotification;
 
 /**
  * {@hide}
@@ -759,6 +760,30 @@ public final class ImsPhoneCallTracker extends CallTracker {
         }
     }
 
+    /*package*/ void
+    startDtmf(char c) {
+        if (DBG) log("startDtmf");
+
+        ImsCall imscall = mForegroundCall.getImsCall();
+        if (imscall != null) {
+            imscall.startDtmf(c);
+        } else {
+            loge("startDtmf : no foreground call");
+        }
+    }
+
+    /*package*/ void
+    stopDtmf() {
+        if (DBG) log("stopDtmf");
+
+        ImsCall imscall = mForegroundCall.getImsCall();
+        if (imscall != null) {
+            imscall.stopDtmf();
+        } else {
+            loge("stopDtmf : no foreground call");
+        }
+    }
+
     //***** Called from ImsPhoneConnection
 
     /*package*/ void
@@ -1056,7 +1081,8 @@ public final class ImsPhoneCallTracker extends CallTracker {
                     mPhone.initiateSilentRedial();
                     return;
                 }
-                mPendingMO = null;
+                mPendingMO.setDisconnectCause(DisconnectCause.ERROR_UNSPECIFIED);
+                sendEmptyMessageDelayed(EVENT_HANGUP_PENDINGMO, TIMEOUT_HANGUP_PENDINGMO);
             }
         }
 
@@ -1156,6 +1182,13 @@ public final class ImsPhoneCallTracker extends CallTracker {
                 mPhone.stopOnHoldTone();
                 mOnHoldToneStarted = false;
             }
+
+            SuppServiceNotification supp = new SuppServiceNotification();
+            // Type of notification: 0 = MO; 1 = MT
+            // Refer SuppServiceNotification class documentation.
+            supp.notificationType = 1;
+            supp.code = SuppServiceNotification.MT_CODE_CALL_RETRIEVED;
+            mPhone.notifySuppSvcNotification(supp);
         }
 
         @Override
@@ -1169,6 +1202,13 @@ public final class ImsPhoneCallTracker extends CallTracker {
                     mOnHoldToneStarted = true;
                 }
             }
+
+            SuppServiceNotification supp = new SuppServiceNotification();
+            // Type of notification: 0 = MO; 1 = MT
+            // Refer SuppServiceNotification class documentation.
+            supp.notificationType = 1;
+            supp.code = SuppServiceNotification.MT_CODE_CALL_ON_HOLD;
+            mPhone.notifySuppSvcNotification(supp);
         }
 
         @Override
@@ -1341,6 +1381,18 @@ public final class ImsPhoneCallTracker extends CallTracker {
             mHandoverCall.mConnections = call.mConnections;
         } else { // Multi-call SRVCC
             mHandoverCall.mConnections.addAll(call.mConnections);
+        }
+        if (mHandoverCall.mConnections != null) {
+            if (call.getImsCall() != null) {
+                call.getImsCall().close();
+            }
+            for (Connection c : mHandoverCall.mConnections) {
+                ((ImsPhoneConnection)c).changeParent(mHandoverCall);
+            }
+        }
+        if (call.getState().isAlive()) {
+            log ("Call is alive and state is " + call.mState);
+            mHandoverCall.mState = call.mState;
         }
         call.mConnections.clear();
         call.mState = ImsPhoneCall.State.IDLE;
