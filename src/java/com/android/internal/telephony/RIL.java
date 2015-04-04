@@ -497,10 +497,10 @@ public class RIL extends BaseCommands implements CommandsInterface {
         return messageLength;
     }
 
-    class RILReceiver implements Runnable {
+    protected class RILReceiver implements Runnable {
         byte[] buffer;
 
-        RILReceiver() {
+        protected RILReceiver() {
             buffer = new byte[RIL_MAX_COMMAND_BYTES];
         }
 
@@ -672,7 +672,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
             riljLog("Not starting RILReceiver: wifi-only");
         } else {
             riljLog("Starting RILReceiver");
-            mReceiver = new RILReceiver();
+            mReceiver = createRILReceiver();
             mReceiverThread = new Thread(mReceiver, "RILReceiver");
             mReceiverThread.start();
 
@@ -681,6 +681,10 @@ public class RIL extends BaseCommands implements CommandsInterface {
             filter.addAction(Intent.ACTION_SCREEN_OFF);
             context.registerReceiver(mIntentReceiver, filter);
         }
+    }
+
+    protected RILReceiver createRILReceiver() {
+        return new RILReceiver();
     }
 
     //***** CommandsInterface implementation
@@ -4640,6 +4644,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
             rr = RILRequest.obtain(RIL_REQUEST_SIM_TRANSMIT_CHANNEL, result);
         }
 
+        rr.mParcel.writeInt(cla);
         rr.mParcel.writeInt(command);
         rr.mParcel.writeInt(channel);
         rr.mParcel.writeString(null);
@@ -4648,7 +4653,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
         rr.mParcel.writeInt(p3);
         rr.mParcel.writeString(data);
         rr.mParcel.writeString(null);
-        rr.mParcel.writeInt(cla);
+        rr.mParcel.writeString(null);
 
         if (RILJ_LOGD) riljLog(rr.serialString() + "> iccExchangeAPDU: "
                 + requestToString(rr.mRequest)
