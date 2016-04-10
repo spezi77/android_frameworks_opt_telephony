@@ -241,6 +241,9 @@ public abstract class DcTrackerBase extends Handler {
     //        really a lower power mode")
     protected boolean mIsScreenOn = true;
 
+    // Indicates if we found mvno-specific APNs in the full APN list.
+    protected boolean mMvnoMatched = false;
+
     /** Allows the generation of unique Id's for DataConnection objects */
     protected AtomicInteger mUniqueIdGenerator = new AtomicInteger(0);
 
@@ -711,7 +714,7 @@ public abstract class DcTrackerBase extends Handler {
                         }
                         return dunSetting;
                     }
-                } else {
+                } else if (mMvnoMatched == false) {
                     if (VDBG) log("fetchDunApn: global TETHER_DUN_APN dunSetting=" + dunSetting);
                     return dunSetting;
                 }
@@ -734,7 +737,7 @@ public abstract class DcTrackerBase extends Handler {
                         }
                         return dunSetting;
                     }
-                } else {
+                } else if (mMvnoMatched == false) {
                     retDunSetting = dunSetting;
                 }
             }
@@ -1781,18 +1784,23 @@ public abstract class DcTrackerBase extends Handler {
     }
 
     protected void setInitialAttachApn() {
+        setInitialAttachApn(mAllApnSettings, mPreferredApn);
+    }
+
+    protected void setInitialAttachApn(ArrayList <ApnSetting> apnList,
+            ApnSetting preferredApn) {
         ApnSetting iaApnSetting = null;
         ApnSetting defaultApnSetting = null;
         ApnSetting firstApnSetting = null;
 
-        log("setInitialApn: E mPreferredApn=" + mPreferredApn);
+        log("setInitialApn: E preferredApn=" + preferredApn);
 
-        if (mAllApnSettings != null && !mAllApnSettings.isEmpty()) {
-            firstApnSetting = mAllApnSettings.get(0);
+        if (apnList != null && !apnList.isEmpty()) {
+            firstApnSetting = apnList.get(0);
             log("setInitialApn: firstApnSetting=" + firstApnSetting);
 
             // Search for Initial APN setting and the first apn that can handle default
-            for (ApnSetting apn : mAllApnSettings) {
+            for (ApnSetting apn : apnList) {
                 // Can't use apn.canHandleType(), as that returns true for APNs that have no type.
                 if (ArrayUtils.contains(apn.types, PhoneConstants.APN_TYPE_IA) &&
                         apn.carrierEnabled) {
@@ -1819,9 +1827,9 @@ public abstract class DcTrackerBase extends Handler {
         if (iaApnSetting != null) {
             if (DBG) log("setInitialAttachApn: using iaApnSetting");
             initialAttachApnSetting = iaApnSetting;
-        } else if (mPreferredApn != null) {
-            if (DBG) log("setInitialAttachApn: using mPreferredApn");
-            initialAttachApnSetting = mPreferredApn;
+        } else if (preferredApn != null) {
+            if (DBG) log("setInitialAttachApn: using preferredApn");
+            initialAttachApnSetting = preferredApn;
         } else if (defaultApnSetting != null) {
             if (DBG) log("setInitialAttachApn: using defaultApnSetting");
             initialAttachApnSetting = defaultApnSetting;
